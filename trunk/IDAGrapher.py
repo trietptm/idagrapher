@@ -17,7 +17,6 @@ class IDAAnalyzer:
 
 		self.AnalyzeAllSections()
 		self.CleanUpNops()
-		self.PrintOverview()
 		#self.PrintAnalysisData()
 
 	def DetectDOTExe(self):
@@ -69,9 +68,11 @@ class IDAAnalyzer:
 
 				disasm_line = op_code + ' ' 
 				for i in range(0, 6, 1):
-					operand = idaapi.tag_remove( idaapi.ua_outop2( CurrentAddress, i ) )
+					operand = idaapi.ua_outop2( CurrentAddress, i )
 					if not operand:
 						break;
+
+					operand = idaapi.tag_remove( operand )
 					if i != 0:
 						disasm_line += ','
 					disasm_line += operand
@@ -112,8 +113,11 @@ class IDAAnalyzer:
 					ret = xref.next_from()
 
 				if ( op_code == 'call' or op_code =='mp' ) and not CallIsResolved:
-					operand = idaapi.tag_remove( idaapi.ua_outop2( CurrentAddress, 0 ) )
-					self.AddToMap( CurrentBlockAddress, operand, 'call')
+					operand = idaapi.ua_outop2( CurrentAddress, 0 )
+
+					if operand:
+						operand = idaapi.tag_remove( operand )
+						self.AddToMap( CurrentBlockAddress, operand, 'call')
 
 				if NewBlockStart and op_code != 'jmp':
 					self.AddToMap( CurrentBlockAddress,CurrentAddress + idaapi.cvar.cmd.size, 'link')
@@ -209,5 +213,4 @@ class IDAAnalyzer:
 
 if __name__ == '__main__':
 	ida_analyzer = IDAAnalyzer()
-
-
+	ida_analyzer.PrintOverview( 'dot', True, 'png' )
