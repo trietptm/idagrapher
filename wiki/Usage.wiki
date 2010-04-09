@@ -1,6 +1,4 @@
-#summary One-sentence summary of this page.
-
-How to start using the script?
+#summary How to start using the script?
 
 = Introduction =
 
