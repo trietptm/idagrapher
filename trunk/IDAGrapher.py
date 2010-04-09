@@ -9,6 +9,7 @@ class IDAAnalyzer:
 	MapHash = {}
 	DOTExeList = ( r'c:\Program Files (x86)\Graphviz2.26.3\bin\dot.exe', r'c:\Program Files\Graphviz2.26.3\bin\dot.exe' )
 	DOTExe = r'c:\Program Files (x86)\Graphviz2.26.3\bin\dot.exe'
+
 	def __init__( self ):
 		self.DetectDOTExe()
 
@@ -43,7 +44,7 @@ class IDAAnalyzer:
 	 		self.AnalyzeRange( seg.startEA, seg.endEA )
 			i+=1
 
-	def AddToMap(self, Src, Dst, Comment='' ):
+	def AddToMap(self, Src, Dst, DstSymbolicName, Comment='' ):
 		if type(Dst).__name__ == 'int':
 			to_str = hex( Dst )
 		else:
@@ -53,7 +54,7 @@ class IDAAnalyzer:
 
 		map_key = hex(Src) + ":" + to_str
 		if not self.MapHash.has_key( map_key ):
-			self.Map.append( (Src, Dst,Comment )) 
+			self.Map.append( (Src, Dst, DstSymbolicName, Comment )) 
 			self.MapHash[ map_key ] = 1
 
 	def AnalyzeRange( self, startEA, endEA ):
@@ -66,13 +67,14 @@ class IDAAnalyzer:
 				idaapi.decode_insn( CurrentAddress )
 				op_code = idaapi.ua_mnem( CurrentAddress )
 
+				operands=[]
 				disasm_line = op_code + ' ' 
 				for i in range(0, 6, 1):
 					operand = idaapi.ua_outop2( CurrentAddress, i )
 					if not operand:
 						break;
-
 					operand = idaapi.tag_remove( operand )
+					operands.append( operand )
 					if i != 0:
 						disasm_line += ','
 					disasm_line += operand
@@ -86,7 +88,7 @@ class IDAAnalyzer:
 					NewBlockStart = True
 
 				if NewBlockStart and last_op_code[0:3] != 'ret' and last_op_code != 'jmp':
-					self.AddToMap( CurrentBlockAddress,CurrentAddress, 'new block')
+					self.AddToMap( CurrentBlockAddress, CurrentAddress, None, 'new block')
 
 				if NewBlockStart:
 					CurrentBlockAddress = CurrentAddress
@@ -106,18 +108,14 @@ class IDAAnalyzer:
 						NewBlockStart = True
 					elif op_code == 'call':
 						CallIsResolved = True
-						self.AddToMap( CurrentBlockAddress,xref.to, 'call')
+						self.AddToMap( CurrentBlockAddress,xref.to, operands[0], 'call')
 					else:
-						self.AddToMap( CurrentBlockAddress,xref.to, 'from')
+						self.AddToMap( CurrentBlockAddress,xref.to, operands[0], 'from')
 						NewBlockStart = True
 					ret = xref.next_from()
 
-				if ( op_code == 'call' or op_code =='mp' ) and not CallIsResolved:
-					operand = idaapi.ua_outop2( CurrentAddress, 0 )
-
-					if operand:
-						operand = idaapi.tag_remove( operand )
-						self.AddToMap( CurrentBlockAddress, operand, 'call')
+				if ( op_code == 'call' or op_code =='' ) and not CallIsResolved:
+					self.AddToMap( CurrentBlockAddress, operands[0], operands[0], 'call')
 
 				if NewBlockStart and op_code != 'jmp':
 					self.AddToMap( CurrentBlockAddress,CurrentAddress + idaapi.cvar.cmd.size, 'link')
@@ -163,7 +161,7 @@ class IDAAnalyzer:
 				fd.write( '\tbgcolor="#3C3CFF"\r\n' )
 	
 				BranchingOutNodes={}
-				for (frm,to,comment) in self.Map:
+				for ( frm, to, to_symbol, comment ) in self.Map:
 					if self.BlockData.has_key( frm ):
 						BranchingOutNodes[frm]=1
 						style_str=''
@@ -171,9 +169,15 @@ class IDAAnalyzer:
 							style_str='[color="red"]'
 	
 						if type(to).__name__ == 'int':
-							to_str = hex( to )
+							if self.BlockData.has_key( to ) or not to_symbol:
+								to_str = hex( to )
+							else:
+								to_str = to_symbol
 						else:
-							to_str = str( to )
+							if to_symbol:
+								to_str = to_symbol
+							else:
+								to_str = str( to )
 						fd.write( "\t\"" + hex(frm) + "\" -> \"" +  to_str + '\" ' + style_str + ';\r\n' )
 	
 				for block_address in self.BlockData.keys():
